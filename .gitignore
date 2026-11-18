@@ -1,0 +1,23 @@
+# Dependencies (re-created by `npm install`)
+node_modules/
+
+# Build output (re-created by `npm run build`)
+dist/
+coverage/
+*.tsbuildinfo
+.vite/
+
+# Logs
+npm-debug.log*
+*.log
+
+# Local environment files
+.env
+.env.*
+*.local
+
+# OS and editor clutter
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/

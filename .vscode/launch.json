@@ -1,0 +1,23 @@
+{
+  // Start the dev server first (`npm run dev`), then press F5.
+  // Breakpoints set in .ts files work because Vite serves source maps.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "Launch Chrome against localhost",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}",
+      "sourceMaps": true
+    },
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "Launch Chrome in #debug mode",
+      "url": "http://localhost:5173/#debug",
+      "webRoot": "${workspaceFolder}",
+      "sourceMaps": true
+    }
+  ]
+}
