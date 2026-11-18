@@ -401,3 +401,81 @@ export const BALL_DESIGNS: BallDesign[] = [
   { id: 'galaxy', name: 'Galaxy', base: '#1b1f3b', panel: '#a5b4fc', unlock: 'hard' },
   { id: 'trophy', name: 'Trophy Gold', base: '#ffd166', panel: '#9a6b00', unlock: 'cup' },
 ];
+
+export interface CpuTeam {
+  id: string;
+  name: string;
+  short: string;
+  difficulty: Difficulty;
+  /** Two kits; the one that contrasts best with yours is worn. */
+  kits: [Kit, Kit];
+}
+
+function cpuKit(
+  id: string,
+  name: string,
+  short: string,
+  shirt: string,
+  shorts: string,
+  socks: string,
+  keeper: string,
+): Kit {
+  return { id, name, short, shirt, shorts, socks, keeper, unlock: null };
+}
+
+/** CPU opponents, from gentle to fierce. Quick Match picks by difficulty; the Cup plays all three. */
+export const CPU_TEAMS: CpuTeam[] = [
+  {
+    id: 'meadowbank',
+    name: 'Meadowbank Larks',
+    short: 'MBL',
+    difficulty: 'easy',
+    kits: [
+      cpuKit(
+        'meadowbank-home',
+        'Meadowbank Larks',
+        'MBL',
+        '#3a9d23',
+        '#ffffff',
+        '#3a9d23',
+        '#f4d35e',
+      ),
+      cpuKit(
+        'meadowbank-away',
+        'Meadowbank Larks',
+        'MBL',
+        '#f1faee',
+        '#3a9d23',
+        '#f1faee',
+        '#f4d35e',
+      ),
+    ],
+  },
+  {
+    id: 'ironclad',
+    name: 'Ironclad Rovers',
+    short: 'IRO',
+    difficulty: 'normal',
+    kits: [
+      cpuKit('ironclad-home', 'Ironclad Rovers', 'IRO', '#c1121f', '#2b2d42', '#c1121f', '#8ecae6'),
+      cpuKit('ironclad-away', 'Ironclad Rovers', 'IRO', '#adb5bd', '#c1121f', '#adb5bd', '#8ecae6'),
+    ],
+  },
+  {
+    id: 'obsidian',
+    name: 'Obsidian Royals',
+    short: 'OBR',
+    difficulty: 'hard',
+    kits: [
+      cpuKit('obsidian-home', 'Obsidian Royals', 'OBR', '#16161d', '#d4af37', '#16161d', '#e85d04'),
+      cpuKit('obsidian-away', 'Obsidian Royals', 'OBR', '#d4af37', '#16161d', '#d4af37', '#e85d04'),
+    ],
+  },
+];
+
+/** The three cup rounds, played in order against increasingly difficult opponents. */
+export const CUP_ROUNDS: Array<{ name: string; opponentId: string }> = [
+  { name: 'Quarter-final', opponentId: 'meadowbank' },
+  { name: 'Semi-final', opponentId: 'ironclad' },
+  { name: 'Final', opponentId: 'obsidian' },
+];
