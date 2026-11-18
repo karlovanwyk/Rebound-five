@@ -35,6 +35,7 @@ export function createBall(): BallState {
     ownerId: null,
     lastTouchId: null,
     heldByKeeper: false,
+    ownerTime: 0,
   };
 }
 

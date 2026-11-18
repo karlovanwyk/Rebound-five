@@ -34,6 +34,7 @@ import {
 import { createStats, recordPossessionGained, resolveShot, tickStats } from './match/Stats';
 import { attackDirection } from './math';
 import { updateDribble } from './players/Dribbling';
+import { updateKeeperHolding, updateKeeperSaves } from './players/Goalkeeping';
 import { processKickIntents } from './players/Kicking';
 import { separatePlayers, updateMovement } from './players/Movement';
 import { createPlayer, tickPlayerTimers } from './players/Player';
@@ -143,6 +144,7 @@ function playTick(world: World, intents: Intent[], dt: number): void {
   }
   separatePlayers(players);
   enforceKickoffProtection(world, dt);
+  updateKeeperHolding(world, dt);
 
   for (const player of players) startTackle(world, player, intents[player.id]);
   for (const player of players) {
@@ -152,16 +154,21 @@ function playTick(world: World, intents: Intent[], dt: number): void {
   for (const player of players) updateDribble(world, player, dt);
 
   ballStart.copy(ball.pos);
-  const eventCount = world.events.length;
-  stepBall(ball, dt, world.events);
-  resolveShotsThatHitTheBoards(world, eventCount);
-  updateTackles(world);
+  // A ball held in the keeper's hands isn't a free physics object.
+  if (!ball.heldByKeeper) {
+    const eventCount = world.events.length;
+    stepBall(ball, dt, world.events);
+    resolveShotsThatHitTheBoards(world, eventCount);
+    updateTackles(world);
+    updateKeeperSaves(world, ballStart);
+  }
 
   const change = updatePossession(world, ballStart);
   if (change) {
     recordPossessionGained(world, change.gainedBy);
     onBallGained(world, change.gainedBy);
   }
+  if (ball.ownerId !== null) ball.ownerTime += dt;
   tickStats(world, dt);
 
   const scoringTeam = detectGoal(ball.pos);

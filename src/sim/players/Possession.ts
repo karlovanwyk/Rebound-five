@@ -12,9 +12,11 @@
  */
 import type { Vector3 } from 'three';
 import { BALL, PLAYER } from '../../config';
+import { collideArena } from '../ball/Collisions';
 import { resolveShot } from '../match/Stats';
 import { distanceXZ } from '../math';
 import type { PlayerState, World } from '../types';
+import { pickUpIfKeeper } from './Goalkeeping';
 import { footX, footZ, isBodyLocked } from './Player';
 
 /** The ball must be lower than this to be trapped with the feet. */
@@ -22,7 +24,11 @@ const TRAP_HEIGHT = 0.9;
 /** Bodies block balls up to about head height. */
 const BLOCK_HEIGHT = 1.9;
 /** An opponent must be this much closer than the carrier to nick the ball. */
-const STEAL_MARGIN = 0.18;
+const STEAL_MARGIN = 0.25;
+/** Seconds after gaining the ball during which it can't be nicked without a tackle. */
+const FIRST_TOUCH_PROTECTION = 0.35;
+/** The ball must be at least this far from the carrier's feet to be nicked. */
+const HEAVY_TOUCH_DISTANCE = 0.55;
 
 export type PossessionChange = { gainedBy: PlayerState } | null;
 
@@ -85,16 +91,22 @@ function touchDistance(player: PlayerState, ballPos: Vector3): number {
   return Math.min(toBody, toFoot);
 }
 
+/**
+ * An opponent nicks the ball only off a heavy touch: the carrier has had the ball for a
+ * moment (FIRST_TOUCH_PROTECTION), the ball has drifted away from their feet, and the
+ * opponent is clearly closer to it. Otherwise winning the ball needs a tackle.
+ */
 function findThief(world: World, owner: PlayerState): PlayerState | null {
   const { ball } = world;
-  if (ball.pos.y > TRAP_HEIGHT) return null;
+  if (ball.pos.y > TRAP_HEIGHT || ball.ownerTime < FIRST_TOUCH_PROTECTION) return null;
   const ownerDistance = touchDistance(owner, ball.pos);
+  if (ownerDistance < HEAVY_TOUCH_DISTANCE) return null;
   let thief: PlayerState | null = null;
   let thiefDistance = Infinity;
   for (const player of world.players) {
     if (player.team === owner.team || !canTouchBall(player)) continue;
     const d = touchDistance(player, ball.pos);
-    if (d < PLAYER.pickupRadius * 0.85 && d < ownerDistance - STEAL_MARGIN && d < thiefDistance) {
+    if (d < PLAYER.pickupRadius * 0.75 && d < ownerDistance - STEAL_MARGIN && d < thiefDistance) {
       thief = player;
       thiefDistance = d;
     }
@@ -106,6 +118,7 @@ function findThief(world: World, owner: PlayerState): PlayerState | null {
 export function gainControl(world: World, player: PlayerState): void {
   const { ball } = world;
   ball.ownerId = player.id;
+  ball.ownerTime = 0;
   ball.lastTouchId = player.id;
   // Keep 15% of the ball's own velocity so the first touch isn't perfectly dead.
   ball.vel.x = player.vel.x * 0.85 + ball.vel.x * 0.15;
@@ -113,6 +126,7 @@ export function gainControl(world: World, player: PlayerState): void {
   ball.vel.y = Math.min(ball.vel.y, 0) * 0.3;
   ball.spin.set(0, 0, 0);
   player.touchTimer = 0.12;
+  pickUpIfKeeper(world, player);
   world.events.push({ type: 'trap', playerId: player.id });
 }
 
@@ -158,6 +172,8 @@ function blockFastBalls(world: World, ballStart: Vector3): void {
     ball.spin.set(0, 0, 0);
     ball.pos.x = player.pos.x + nx * reach;
     ball.pos.z = player.pos.z + nz * reach;
+    // A player standing at the boards mustn't push the ball through them.
+    collideArena(ball, null);
     ball.lastTouchId = player.id;
     // A blocked shot did not hit the target.
     if (world.pendingShot) resolveShot(world, false);

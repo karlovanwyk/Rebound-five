@@ -2,8 +2,8 @@
  * main.ts: entry point. Wires the simulation, input, renderer and HUD together and
  * starts the loop.
  *
- * Milestone 2: a full 5-a-side match against a team that stands still (no AI yet).
- * Pass, tackle, switch player, score, and watch the clock run to full time.
+ * Milestone 3: a full match against the CPU (Normal difficulty), with AI teammates and
+ * AI goalkeepers. You control one player; the AI runs everyone else through Intents.
  *
  * Data flow each tick:  keyboard -> HumanController -> Intent -> stepWorld() -> Snapshot
  * Each frame:           (previous, current snapshot, alpha) -> GameRenderer
@@ -13,9 +13,11 @@ import type { GameStateName } from './core/GameStateMachine';
 import { GameStateMachine } from './core/GameStateMachine';
 import { Loop } from './core/Loop';
 import { HumanController } from './input/HumanController';
-import { createIntent, resetIntent } from './input/Intent';
+import { createIntent } from './input/Intent';
 import { Keyboard } from './input/Keyboard';
 import { GameRenderer } from './render/GameRenderer';
+import { AIController } from './sim/ai/AIController';
+import { presetFor } from './sim/ai/Difficulty';
 import type { SimEvent } from './sim/events';
 import { formatClock } from './sim/match/Clock';
 import { captureSnapshot, copySnapshot, createSnapshot } from './sim/Snapshot';
@@ -58,10 +60,11 @@ function start(): void {
     'P / Esc: pause',
   ]);
 
+  // Outside src/sim, Math.random() is fine: it only picks the seed.
+  let seed = Math.floor(Math.random() * 1e9);
   function createMatchWorld(): World {
     return createWorld({
-      // Outside src/sim, Math.random() is fine: it only picks the seed.
-      seed: Math.floor(Math.random() * 1e9),
+      seed,
       matchMinutes: 3,
       teamNames: [homeKit.name, awayKit.name],
       teamShorts: [homeKit.short, awayKit.short],
@@ -72,10 +75,16 @@ function start(): void {
   let intents = world.players.map(() => createIntent());
   let previous = createSnapshot(world);
   let current = createSnapshot(world);
+  // Your AI teammates play at Normal; the CPU opponent at the chosen difficulty.
+  let teammateAI = new AIController(world, 0, presetFor('normal'), seed + 1);
+  let cpuAI = new AIController(world, 1, presetFor('normal'), seed + 2);
 
   function newMatch(): void {
+    seed = Math.floor(Math.random() * 1e9);
     world = createMatchWorld();
     intents = world.players.map(() => createIntent());
+    teammateAI = new AIController(world, 0, presetFor('normal'), seed + 1);
+    cpuAI = new AIController(world, 1, presetFor('normal'), seed + 2);
     previous = createSnapshot(world);
     current = createSnapshot(world);
     renderer.setMatch(current, [homeKit, awayKit], BALL_DESIGNS[0]);
@@ -103,10 +112,12 @@ function start(): void {
     if (machine.current === 'paused') return;
 
     copySnapshot(previous, current);
-    // Everyone gets an empty Intent except the player the human controls.
-    for (const intent of intents) resetIntent(intent);
-    human.sample(humanIntent);
+    // The AI fills in everyone's Intent except the player the human controls, whose
+    // Intent comes from the keyboard. Both go through exactly the same sim rules.
     const controlled = world.teams[0].controlledId;
+    teammateAI.update(world, intents, controlled);
+    cpuAI.update(world, intents);
+    human.sample(humanIntent);
     if (controlled >= 0) Object.assign(intents[controlled], humanIntent);
 
     stepWorld(world, intents);

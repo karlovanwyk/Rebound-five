@@ -48,7 +48,12 @@ export function updateDribble(world: World, player: PlayerState, dt: number): vo
   const sideways = offsetX * -fz + offsetZ * fx;
   const correction = -sideways * 3;
 
-  const factor = player.sprinting ? PLAYER.sprintTouchSpeedFactor : PLAYER.touchSpeedFactor;
+  // Lining up a shot means smaller touches, keeping the ball within kicking reach.
+  const factor = player.charging
+    ? 1.05
+    : player.sprinting
+      ? PLAYER.sprintTouchSpeedFactor
+      : PLAYER.touchSpeedFactor;
   const touchSpeed = speed * factor;
   ball.vel.x = fx * touchSpeed - fz * correction;
   ball.vel.z = fz * touchSpeed + fx * correction;

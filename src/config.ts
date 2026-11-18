@@ -134,7 +134,7 @@ export const TACKLE = {
   standDuration: 0.35,
   /** Seconds into the tackle animation when the foot arrives. */
   standContactTime: 0.12,
-  standSuccess: 0.75,
+  standSuccess: 0.62,
   /** Tackling from behind rarely works. */
   standFromBehindSuccess: 0.3,
   cooldown: 0.6,
@@ -150,6 +150,117 @@ export const TACKLE = {
   /** How long a tackled player is off their feet. */
   stumbleTime: 0.35,
   knockdownTime: 0.9,
+};
+
+/** Goalkeeper rules. Every keeper (yours and the CPU's) uses these. */
+export const KEEPER = {
+  /** Horizontal reach of the hands when standing. */
+  handReach: 0.8,
+  /** Highest ball a keeper can reach (with a jump). */
+  reachHeight: 2.4,
+  diveSpeed: 6.2,
+  diveDuration: 0.55,
+  /** Length of the stretched body along the dive direction. */
+  diveReach: 1.5,
+  /** Balls slower than this (relative to the keeper) are caught when the keeper is set. */
+  catchMaxSpeed: 19,
+  /** Diving catches only work on slower shots; faster ones are parried. */
+  diveCatchMaxSpeed: 12,
+  /** A shot this close to the keeper's body counts as "into the hands". */
+  centredRadius: 0.5,
+  /** A parry keeps this fraction of the ball's speed. */
+  parrySpeedFactor: 0.35,
+  /** The keeper must release the ball within this many seconds. */
+  holdMaxTime: 6,
+};
+
+/**
+ * One CPU difficulty preset. Difficulty changes only how well the AI decides. It
+ * never changes speed or physics: those come from PLAYER, KICK and KEEPER for everyone.
+ */
+export interface DifficultyPreset {
+  label: string;
+  /** Seconds before the team reacts to a change of possession. */
+  reactionTime: number;
+  /** Seconds between re-evaluating pass / shoot / dribble while on the ball. */
+  decisionInterval: number;
+  /** Aim noise on passes (radians, standard deviation). */
+  passError: number;
+  /** Aim noise on shots (fraction of the goal's half-width, standard deviation). */
+  shotError: number;
+  /** Random noise added to every option's score: higher means sloppier choices. */
+  decisionNoise: number;
+  /** 0..1: sprinting to press, a second presser near goal, how high the line pushes. */
+  pressIntensity: number;
+  /** Distance at which a presser attempts a tackle. */
+  tackleRange: number;
+  /** Chance a presser chooses a slide tackle when it can. */
+  slideTackleChance: number;
+  /** Seconds the keeper needs to react to a shot. */
+  keeperReaction: number;
+  /** Error in the keeper's prediction of where a shot crosses the line (metres). */
+  keeperError: number;
+  /** 0..1: how well the keeper narrows the angle by coming off the line. */
+  keeperPositioning: number;
+  /** A shot must score at least this (0..1) before the AI takes it. */
+  shootThreshold: number;
+}
+
+export type Difficulty = 'easy' | 'normal' | 'hard';
+
+export const AI: {
+  presets: Record<Difficulty, DifficultyPreset>;
+  /** Your AI teammates always play at this level. */
+  teammateDifficulty: Difficulty;
+} = {
+  presets: {
+    easy: {
+      label: 'Easy',
+      reactionTime: 0.5,
+      decisionInterval: 0.7,
+      passError: 0.22,
+      shotError: 0.45,
+      decisionNoise: 0.22,
+      pressIntensity: 0.25,
+      tackleRange: 1.0,
+      slideTackleChance: 0.05,
+      keeperReaction: 0.36,
+      keeperError: 0.9,
+      keeperPositioning: 0.55,
+      shootThreshold: 0.42,
+    },
+    normal: {
+      label: 'Normal',
+      reactionTime: 0.28,
+      decisionInterval: 0.4,
+      passError: 0.12,
+      shotError: 0.25,
+      decisionNoise: 0.12,
+      pressIntensity: 0.6,
+      tackleRange: 1.15,
+      slideTackleChance: 0.15,
+      keeperReaction: 0.24,
+      keeperError: 0.5,
+      keeperPositioning: 0.8,
+      shootThreshold: 0.36,
+    },
+    hard: {
+      label: 'Hard',
+      reactionTime: 0.14,
+      decisionInterval: 0.2,
+      passError: 0.05,
+      shotError: 0.13,
+      decisionNoise: 0.04,
+      pressIntensity: 0.95,
+      tackleRange: 1.25,
+      slideTackleChance: 0.25,
+      keeperReaction: 0.15,
+      keeperError: 0.25,
+      keeperPositioning: 1,
+      shootThreshold: 0.32,
+    },
+  },
+  teammateDifficulty: 'normal',
 };
 
 /** Match flow. */

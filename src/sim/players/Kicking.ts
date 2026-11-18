@@ -81,6 +81,8 @@ function executeKick(
   intent: Intent,
   kick: BufferedKick,
 ): PlayerState | null {
+  const heldByThisKeeper = world.ball.heldByKeeper && world.ball.ownerId === player.id;
+  if (kick.kind === 'shot' && heldByThisKeeper) return strikePass(world, player, intent, true);
   if (kick.kind === 'shot') {
     strikeShot(world, player, intent, kick.power);
     return null;
@@ -150,6 +152,7 @@ export function strikePass(
   lofted: boolean,
 ): PlayerState | null {
   const { ball, rng } = world;
+  const fromHands = ball.heldByKeeper && ball.ownerId === player.id;
   const aim = aimDirection(player, intent);
   const receiver = choosePassReceiver(world, player, aim.x, aim.z);
   const attackDir = world.teams[player.team].attackDir;
@@ -182,7 +185,7 @@ export function strikePass(
   angle += keptError + rng.gaussian() * (player.sprinting ? 0.03 : 0.012);
 
   if (lofted) {
-    const flightTime = clamp(distance / 15, KICK.throughMinFlight, KICK.throughMaxFlight);
+    const flightTime = throughBallFlightTime(distance);
     const horizontal = ((distance * 0.8) / flightTime) * 1.08;
     ball.vel.set(
       Math.cos(angle) * horizontal,
@@ -190,23 +193,39 @@ export function strikePass(
       Math.sin(angle) * horizontal,
     );
   } else {
-    const ideal =
-      Math.sqrt(KICK.passArriveSpeed ** 2 + 2 * BALL.rollingDeceleration * distance) * 1.06;
-    const speed = clamp(ideal, KICK.passMinSpeed, KICK.passMaxSpeed);
+    const speed = groundPassSpeed(distance);
     ball.vel.set(Math.cos(angle) * speed, 0, Math.sin(angle) * speed);
   }
   ball.spin.set(0, 0, 0);
 
-  releaseBall(world, player, lofted ? 'through' : 'pass', lofted ? 0.7 : 0.4);
+  let kind: KickKind = lofted ? 'through' : 'pass';
+  if (fromHands) {
+    // Keepers throw short passes (released at hand height) and punt long ones.
+    kind = lofted ? 'punt' : 'throw';
+    if (!lofted) ball.vel.y = 1.2;
+  }
+  releaseBall(world, player, kind, lofted ? 0.7 : 0.4);
   recordPass(world, player, receiver);
   return receiver;
+}
+
+/** Launch speed for a ground pass over `distance` metres (see strikePass). */
+export function groundPassSpeed(distance: number): number {
+  const ideal =
+    Math.sqrt(KICK.passArriveSpeed ** 2 + 2 * BALL.rollingDeceleration * distance) * 1.06;
+  return clamp(ideal, KICK.passMinSpeed, KICK.passMaxSpeed);
+}
+
+/** Flight time for a lofted pass over `distance` metres. */
+export function throughBallFlightTime(distance: number): number {
+  return clamp(distance / 15, KICK.throughMinFlight, KICK.throughMaxFlight);
 }
 
 /**
  * Shoot at the goal the player's team attacks.
  *
- * Aiming: pushing the stick across the pitch (z) aims toward that post. With no
- * sideways input, the shot goes where the player is facing, clipped to the goal mouth.
+ * Aiming: the shot follows the stick direction (or the facing direction if the stick is
+ * centred) to the goal line, kept inside the posts. See chooseShotAimZ().
  * Errors: direction error is drawn from a bell curve (SeededRandom.gaussian). Its spread
  * grows with power squared and with being off-balance (shooting across your body, or
  * sprinting).
@@ -224,7 +243,7 @@ export function strikeShot(world: World, player: PlayerState, intent: Intent, po
     return;
   }
 
-  const aimZ = chooseShotAimZ(player, intent, goalX);
+  const aimZ = chooseShotAimZ(world, player, intent, goalX);
   const aimAngle = angleOf(goalX - ball.pos.x, aimZ - ball.pos.z);
 
   const offBalance =
@@ -248,19 +267,19 @@ export function strikeShot(world: World, player: PlayerState, intent: Intent, po
   recordShot(world, player);
 }
 
-/** Where on the goal line (z) to aim. */
-function chooseShotAimZ(player: PlayerState, intent: Intent, goalX: number): number {
-  const W = PITCH.goalHalfWidth;
-  if (Math.abs(intent.moveZ) > 0.3) {
-    return Math.sign(intent.moveZ) * W * 0.8 * Math.min(1, Math.abs(intent.moveZ) * 1.25);
-  }
-  // Follow the facing direction to the goal line: solve pos + t * dir = goalX for t.
-  const fx = Math.cos(player.facing);
-  const fz = Math.sin(player.facing);
-  if (Math.abs(fx) < 0.15) return 0;
-  const t = (goalX - player.pos.x) / fx;
-  if (t <= 0) return 0;
-  return clamp(player.pos.z + fz * t, -W * 0.6, W * 0.6);
+/**
+ * Where on the goal line (z) to aim. Follow the aim direction (the stick if it's pushed,
+ * otherwise the facing direction) from the ball to the goal line, then keep the result
+ * inside the posts. Solve ballX + t * aimX = goalX for t, and the aim point is
+ * ballZ + t * aimZ. Pushing diagonally toward goal therefore picks a corner.
+ */
+function chooseShotAimZ(world: World, player: PlayerState, intent: Intent, goalX: number): number {
+  const limit = PITCH.goalHalfWidth * 0.85;
+  const aim = aimDirection(player, intent);
+  const { ball } = world;
+  const depth = goalX - ball.pos.x;
+  if (aim.x * Math.sign(depth) < 0.15) return Math.abs(aim.z) < 0.1 ? 0 : Math.sign(aim.z) * limit;
+  return clamp(ball.pos.z + aim.z * (depth / aim.x), -limit, limit);
 }
 
 /** Facing away from goal: just boot it the way you're facing. */

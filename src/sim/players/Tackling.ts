@@ -18,10 +18,12 @@ import { PLAYER, TACKLE } from '../../config';
 import type { Intent } from '../../input/Intent';
 import { angleDiff, angleOf } from '../math';
 import type { PlayerState, World } from '../types';
+import { tryKeeperDive } from './Goalkeeping';
 import { isBodyLocked, startAction } from './Player';
 
 /** Start a tackle if one was requested and allowed. */
 export function startTackle(world: World, player: PlayerState, intent: Intent): void {
+  if (tryKeeperDive(world, player, intent)) return;
   if (!intent.tackle || player.tackleCooldown > 0 || isBodyLocked(player)) return;
   if (player.action === 'standTackle' || world.ball.ownerId === player.id) return;
 

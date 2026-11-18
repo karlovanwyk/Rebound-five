@@ -68,6 +68,8 @@ export interface BallState {
   lastTouchId: number | null;
   /** True while a goalkeeper holds the ball in their hands. */
   heldByKeeper: boolean;
+  /** Seconds the current owner has had the ball (protects a first touch from instant steals). */
+  ownerTime: number;
 }
 
 export interface TeamState {
