@@ -215,9 +215,10 @@ npm run preview   # serve dist/ at http://localhost:4173 to check it
 `dist/` is a static site: `index.html` plus hashed JS/CSS files. Upload it to any static
 host:
 
-- **GitHub Pages**: push `dist/` to a `gh-pages` branch (or use a Pages workflow). The
-  build uses relative asset paths (`base: './'` in `vite.config.ts`), so it works from a
-  sub-folder like `username.github.io/rebound-five/`.
+- **GitHub Pages** (set up): `.github/workflows/deploy.yml` tests, builds and publishes
+  `dist/` on every push to `main`. One-time setup: **Settings → Pages → Source: GitHub
+  Actions**. The build uses relative asset paths (`base: './'` in `vite.config.ts`), so it
+  works from a sub-folder like `username.github.io/Rebound-five/`.
 - **Netlify / Cloudflare Pages**: build command `npm run build`, publish directory `dist`.
   Or drag the `dist` folder onto Netlify's deploy page.
 
