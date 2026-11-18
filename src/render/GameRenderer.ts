@@ -27,6 +27,7 @@ import { COLORS } from '../config';
 import type { SimEvent } from '../sim/events';
 import type { Snapshot } from '../sim/Snapshot';
 import { CameraRig } from './CameraRig';
+import { Crowd } from './Crowd';
 import { SceneView } from './SceneView';
 import { Stadium } from './Stadium';
 
@@ -35,6 +36,7 @@ export class GameRenderer {
   readonly scene = new Scene();
   readonly cameraRig = new CameraRig();
   readonly stadium: Stadium;
+  readonly crowd: Crowd;
   view: SceneView | null = null;
   /** Player id the celebration camera should orbit. */
   cameraSubjectId: number | null = null;
@@ -56,6 +58,8 @@ export class GameRenderer {
 
     this.stadium = new Stadium(this.renderer.capabilities.getMaxAnisotropy());
     this.scene.add(this.stadium.group);
+    this.crowd = new Crowd(this.stadium.tiers);
+    this.scene.add(this.crowd.mesh);
 
     window.addEventListener('resize', this.resize);
     this.resize();
@@ -93,12 +97,15 @@ export class GameRenderer {
     this.view?.dispose();
     this.view = new SceneView(snapshot, kits, ballDesign);
     this.scene.add(this.view.group);
+    this.crowd.setColours(kits[0], kits[1]);
   }
 
   /** React to simulation events that have a visual effect. */
   handleEvent(event: SimEvent): void {
     if (event.type === 'bounce' && event.surface === 'net') {
       this.stadium.goals.onNetHit(event.x, event.y, event.z, event.speed);
+    } else if (event.type === 'goal') {
+      this.crowd.celebrate();
     }
   }
 
@@ -113,6 +120,7 @@ export class GameRenderer {
       this.cameraRig.update(dt, view.ballPoint, leanDir, subject ?? null);
     }
     this.stadium.update(dt);
+    this.crowd.update(dt);
     this.renderer.render(this.scene, this.cameraRig.camera);
   }
 

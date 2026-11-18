@@ -139,9 +139,12 @@ export class Stadium {
       endPanel.position.set(side * L, y, 0);
       this.group.add(endPanel);
 
-      const rail = new Mesh(new BoxGeometry(L * 2, 0.06, 0.06), frame);
-      rail.position.set(0, PITCH.boardHeight + height, side * W);
-      this.group.add(rail);
+      // No top rail on the near side (+z): it would cut across the broadcast camera's view.
+      if (side < 0) {
+        const rail = new Mesh(new BoxGeometry(L * 2, 0.06, 0.06), frame);
+        rail.position.set(0, PITCH.boardHeight + height, side * W);
+        this.group.add(rail);
+      }
       const endRail = new Mesh(new BoxGeometry(0.06, 0.06, W * 2), frame);
       endRail.position.set(side * L, PITCH.boardHeight + height, 0);
       this.group.add(endRail);

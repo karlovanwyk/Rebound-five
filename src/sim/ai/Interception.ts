@@ -150,7 +150,10 @@ export function passLaneRisk(
   if (distance < 1e-6) return 0;
   const samples = 10;
   let risk = 0;
-  for (let i = 1; i <= samples; i++) {
+  // Sample the lane up to 90% of the way. The last stretch is the receiver's own space:
+  // a defender who can only get to the receiver is contesting, not intercepting, and
+  // PassScoring measures that separately (its 'space' term).
+  for (let i = 1; i < samples; i++) {
     const f = i / samples;
     // A lofted ball is over everyone's head for the middle of its flight.
     if (lofted && f > 0.15 && f < 0.8) continue;

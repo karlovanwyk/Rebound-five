@@ -59,6 +59,13 @@ body {
   pointer-events: auto;
 }
 
+/* Full-screen layers must let clicks through, except on their own controls. */
+#ui-root > .hud,
+#ui-root > .touch,
+#ui-root > .attract-tag {
+  pointer-events: none;
+}
+
 /* ---------- HUD ---------- */
 
 .hud {

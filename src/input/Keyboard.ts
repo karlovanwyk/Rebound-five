@@ -33,7 +33,7 @@ const GAME_KEYS = new Set([
 export class Keyboard {
   private readonly held = new Set<string>();
   private readonly pressed = new Set<string>();
-  private readonly listeners: Array<(code: string) => void> = [];
+  private readonly listeners: Array<(code: string, event: KeyboardEvent) => void> = [];
 
   constructor(private readonly target: Window = window) {
     target.addEventListener('keydown', this.onKeyDown);
@@ -58,8 +58,12 @@ export class Keyboard {
     this.pressed.clear();
   }
 
-  /** Get told about every new key press (used for menus and global shortcuts). */
-  onPress(listener: (code: string) => void): void {
+  /**
+   * Get told about every new key press (used for menus and global shortcuts). The event is
+   * passed along so a listener can call preventDefault(), for example to stop Enter also
+   * clicking whichever button gets focus as a result of the key press.
+   */
+  onPress(listener: (code: string, event: KeyboardEvent) => void): void {
     this.listeners.push(listener);
   }
 
@@ -75,7 +79,7 @@ export class Keyboard {
     // Holding a key makes the OS repeat keydown events. Those aren't new presses.
     if (!event.repeat) {
       this.pressed.add(event.code);
-      for (const listener of this.listeners) listener(event.code);
+      for (const listener of this.listeners) listener(event.code, event);
     }
   };
 

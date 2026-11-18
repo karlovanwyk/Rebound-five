@@ -1,17 +1,19 @@
 /**
- * main.ts: entry point. Creates the renderer, input, UI and storage, wires them together
- * and starts the loop. It also owns the app flow: which screen is showing and which match
- * is running.
+ * main.ts: entry point. Creates the renderer, input devices, audio, UI and storage, wires
+ * them together and starts the loop. It also owns the app flow: which screen is showing
+ * and which match is running.
  *
  *   boot -> menu -> teamSelect -> kickoff/playing/goalScored -> fullTime -> menu ...
  *
  * Behind the menus a CPU vs CPU "attract mode" match keeps playing.
  *
  * Data flow each tick:  input -> HumanController -> Intent -> MatchSession.step() -> Snapshot
- * Each frame:           (previous, current snapshot, alpha) -> GameRenderer, HUD
+ * Each frame:           (previous, current snapshot, alpha) -> GameRenderer, HUD, minimap
+ * Sim events:           SimEvent -> AudioEngine (sounds), GameRenderer (nets, crowd), HUD
  */
+import { AudioEngine } from './audio/AudioEngine';
 import type { CpuTeam, Difficulty, Kit } from './config';
-import { BALL_DESIGNS, CPU_TEAMS, KITS, SIM } from './config';
+import { BALL_DESIGNS, CPU_TEAMS, KITS, PITCH, SIM } from './config';
 import type { CupState } from './core/Cup';
 import { createCup, cupOpponent, cupRoundName, recordCupMatch } from './core/Cup';
 import type { GameStateName } from './core/GameStateMachine';
@@ -19,18 +21,22 @@ import { GameStateMachine } from './core/GameStateMachine';
 import { Loop } from './core/Loop';
 import { contrastingKit, MatchSession } from './core/MatchSession';
 import { SaveStore } from './core/Storage';
+import { GamepadInput, PAD } from './input/Gamepad';
 import { HumanController } from './input/HumanController';
 import { createIntent } from './input/Intent';
 import { Keyboard } from './input/Keyboard';
+import { TouchControls } from './input/Touch';
 import { GameRenderer } from './render/GameRenderer';
 import type { SimEvent } from './sim/events';
 import { formatClock } from './sim/match/Clock';
 import { possessionPercent } from './sim/match/Stats';
 import type { MatchPhase } from './sim/types';
-import { el } from './ui/dom';
+import type { DebugTools } from './ui/DebugTools';
+import { button, el } from './ui/dom';
 import { Hud } from './ui/Hud';
 import type { MatchChoice } from './ui/Menus';
 import { Menus } from './ui/Menus';
+import { Minimap } from './ui/Minimap';
 
 const PHASE_TO_STATE: Record<MatchPhase, GameStateName> = {
   kickoff: 'kickoff',
@@ -59,26 +65,42 @@ function start(): void {
   try {
     renderer = new GameRenderer(canvas);
   } catch (error) {
-    uiRoot.textContent = 'WebGL is not available in this browser, so Rebound Five cannot run.';
+    uiRoot.textContent =
+      'WebGL is not available in this browser, so Rebound Five cannot run. ' +
+      'Try another browser, or enable hardware acceleration in your browser settings.';
     console.error(error);
     return;
   }
 
+  // ----- services -----
   const save = SaveStore.forBrowser();
+  const audio = new AudioEngine(save.data.settings.muted);
   const keyboard = new Keyboard(window);
-  const human = new HumanController(keyboard);
-  const humanIntent = createIntent();
+  const gamepad = new GamepadInput();
   const machine = new GameStateMachine();
   const hud = new Hud(uiRoot);
+  const minimap = new Minimap(hud.root);
   const menus = new Menus(uiRoot);
+  const touch = new TouchControls(uiRoot, () => audio.unlock());
+  const human = new HumanController(keyboard, gamepad, touch);
+  const humanIntent = createIntent();
   const attractTag = el('div', 'attract-tag', 'CPU vs CPU');
   uiRoot.append(attractTag);
   hud.setHelp([
     'WASD / arrows: move   Shift: sprint',
     'J: pass   I: through ball   K: shoot (hold)',
     'L: tackle (+Shift: slide)   Q: switch',
-    'P / Esc: pause',
+    'P / Esc: pause   M: mute',
   ]);
+
+  // On-screen buttons: mute (always) and pause (during a match, mainly for touch).
+  const corner = el('div', 'hud-buttons');
+  const muteButton = button('', 'icon-btn', () => toggleMute());
+  const pauseButton = button('II', 'icon-btn', () => pause());
+  pauseButton.setAttribute('aria-label', 'Pause');
+  corner.append(pauseButton, muteButton);
+  uiRoot.append(corner);
+  refreshMuteButton();
 
   let mode: Mode = 'attract';
   let session = createAttractSession();
@@ -89,6 +111,7 @@ function start(): void {
   let fullTimeTimer = 0;
   let attractRestartTimer = 0;
   let unlocksThisMatch: string[] = [];
+  let debugTools: DebugTools | null = null;
 
   // ----- sessions -----
 
@@ -114,6 +137,7 @@ function start(): void {
     renderer.setMatch(session.current, [home.kit, away.kit], ball);
     renderer.cameraSubjectId = null;
     hud.setTeams(home.short, home.kit.shirt, away.short, away.kit.shirt);
+    minimap.setTeamColours(home.kit.shirt, away.kit.shirt);
   }
 
   function startAttract(): void {
@@ -123,6 +147,9 @@ function start(): void {
     hud.setVisible(false);
     hud.hideBanner();
     attractTag.style.display = '';
+    pauseButton.style.display = 'none';
+    touch.setVisible(false);
+    audio.setAmbience(0.45);
     attractRestartTimer = 0;
   }
 
@@ -151,8 +178,11 @@ function start(): void {
     hud.setVisible(true);
     hud.hideBanner();
     attractTag.style.display = 'none';
+    pauseButton.style.display = '';
+    touch.setVisible(true);
+    audio.setAmbience(1);
     renderer.cameraRig.setMode('broadcast');
-    keyboard.clearPresses();
+    human.clearPresses();
     fullTimeTimer = 0;
     unlocksThisMatch = [];
     machine.transition('kickoff');
@@ -163,8 +193,10 @@ function start(): void {
   // ----- menu flow -----
 
   function leaveBoot(): void {
+    audio.unlock();
     if (machine.current !== 'boot') return;
     showMainMenu();
+    if (!gamepad.connected) hud.toast('Got a controller? Press any button on it to connect.', 5);
   }
 
   function showMainMenu(): void {
@@ -234,22 +266,39 @@ function start(): void {
     startMatch(cupChoice, opponent, opponent.difficulty, true);
   }
 
-  // ----- pause -----
+  // ----- pause & mute -----
 
   function pause(): void {
     if (mode === 'attract') return;
-    if (machine.pause()) menus.showPause(resume, quitToMenu);
+    if (!machine.pause()) return;
+    menus.showPause(resume, quitToMenu);
+    touch.setVisible(false);
+    audio.setAmbience(0.25);
   }
 
   function resume(): void {
     if (!machine.resume()) return;
     menus.hide();
-    keyboard.clearPresses();
+    human.clearPresses();
+    touch.setVisible(true);
+    audio.setAmbience(1);
   }
 
   function quitToMenu(): void {
     cup = null;
     showMainMenu();
+  }
+
+  function toggleMute(): void {
+    audio.unlock();
+    audio.setMuted(!audio.isMuted);
+    save.updateSettings({ muted: audio.isMuted });
+    refreshMuteButton();
+  }
+
+  function refreshMuteButton(): void {
+    muteButton.textContent = audio.isMuted ? '🔇' : '🔊';
+    muteButton.setAttribute('aria-label', audio.isMuted ? 'Unmute' : 'Mute');
   }
 
   // ----- full time -----
@@ -267,6 +316,7 @@ function start(): void {
       if (cup.status === 'champion') unlocksThisMatch.push(...save.recordCupWin());
     }
     hud.showBanner('Full time', `${home} - ${away}`, FULL_TIME_PAUSE);
+    touch.setVisible(false);
     fullTimeTimer = FULL_TIME_PAUSE;
   }
 
@@ -317,8 +367,14 @@ function start(): void {
 
   // ----- simulation events -----
 
+  /** Stereo position of a sound: left or right of where the camera is looking. */
+  function panFor(x: number): number {
+    return Math.max(-1, Math.min(1, (x - renderer.cameraRig.camera.position.x) / 18));
+  }
+
   function onSimEvent(event: SimEvent): void {
     renderer.handleEvent(event);
+    audio.handleEvent(event, panFor);
     if (mode === 'attract') {
       if (event.type === 'whistle' && event.kind === 'fullTime') onFinalWhistle();
       return;
@@ -330,10 +386,17 @@ function start(): void {
       hud.showBanner('Goal!', subtitle, 2.8);
       renderer.cameraSubjectId = event.scorerId;
       renderer.cameraRig.setMode('celebration');
+      gamepad.rumble(event.team === 0 ? 0.8 : 0.3, 300);
     } else if (event.type === 'whistle' && event.kind === 'goldenGoal') {
       hud.showBanner('Golden goal', 'next goal wins', 2.5);
     } else if (event.type === 'whistle' && event.kind === 'fullTime') {
       onFinalWhistle();
+    } else if (
+      event.type === 'kick' &&
+      event.kind === 'shot' &&
+      event.playerId === world.teams[0].controlledId
+    ) {
+      gamepad.rumble(0.2 + event.power * 0.5, 90);
     }
   }
 
@@ -364,8 +427,11 @@ function start(): void {
   }
 
   function render(alpha: number, frameDt: number): void {
+    gamepad.poll();
     renderer.render(session.previous, session.current, alpha, frameDt);
+    audio.update(frameDt, session.current.ball.x, PITCH.halfLength);
     hud.update(frameDt);
+    debugTools?.update();
     if (mode === 'attract') return;
 
     const { world } = session;
@@ -373,7 +439,8 @@ function start(): void {
     hud.setPower(me?.charging ?? false, me?.shotCharge ?? 0);
     hud.setScore(world.match.score[0], world.match.score[1]);
     hud.setClock(formatClock(world.match));
-    hud.help.style.display = machine.current === 'kickoff' ? '' : 'none';
+    hud.help.style.display = machine.current === 'kickoff' && !touch.active ? '' : 'none';
+    minimap.draw(session.current);
 
     if (fullTimeTimer > 0) {
       fullTimeTimer -= frameDt;
@@ -383,9 +450,17 @@ function start(): void {
 
   // ----- input outside the match -----
 
-  keyboard.onPress((code) => {
+  keyboard.onPress((code, event) => {
+    audio.unlock();
     if (machine.current === 'boot') {
+      // Without preventDefault, this same Enter or Space would also click the menu
+      // button that receives focus when the main menu opens.
+      event.preventDefault();
       leaveBoot();
+      return;
+    }
+    if (code === 'KeyM') {
+      toggleMute();
       return;
     }
     if (menus.isOpen) {
@@ -398,13 +473,57 @@ function start(): void {
     if (code === 'KeyP' || code === 'Escape') pause();
   });
 
+  gamepad.onPress((buttonIndex) => {
+    if (machine.current === 'boot') {
+      leaveBoot();
+      return;
+    }
+    if (buttonIndex === PAD.BACK) {
+      toggleMute();
+      return;
+    }
+    if (menus.isOpen) {
+      if (buttonIndex === PAD.DOWN || buttonIndex === PAD.RIGHT) menus.moveFocus(1);
+      else if (buttonIndex === PAD.UP || buttonIndex === PAD.LEFT) menus.moveFocus(-1);
+      else if (buttonIndex === PAD.A) menus.activate();
+      else if (buttonIndex === PAD.B) menus.back();
+      else if (buttonIndex === PAD.START && machine.current === 'paused') resume();
+      return;
+    }
+    if (buttonIndex === PAD.START) pause();
+  });
+
+  gamepad.onConnectionChange((connected, name) => {
+    hud.toast(
+      connected ? `Controller connected: ${name.slice(0, 40)}` : 'Controller disconnected',
+      3,
+    );
+    if (!connected) pause();
+  });
+
+  // Any click or tap counts as the user gesture that lets audio start.
   window.addEventListener('pointerdown', () => leaveBoot());
 
-  // Page Visibility API: pause automatically when the tab is hidden.
+  // Page Visibility API: pause and silence the game when the tab is hidden.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) pause();
-    else loop.resetTiming();
+    if (document.hidden) {
+      pause();
+      audio.suspend();
+    } else {
+      audio.resume();
+      loop.resetTiming();
+    }
   });
+
+  // #debug: load the debug tools (and lil-gui) as separate chunks, only when asked for.
+  const loadDebugTools = (): void => {
+    if (debugTools || !location.hash.includes('debug')) return;
+    void import('./ui/DebugTools').then(async ({ installDebugTools }) => {
+      debugTools = await installDebugTools({ renderer, getSession: () => session });
+    });
+  };
+  window.addEventListener('hashchange', loadDebugTools);
+  loadDebugTools();
 
   const loop = new Loop(SIM.dt, { update, render });
   startAttract();
