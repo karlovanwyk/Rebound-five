@@ -44,6 +44,7 @@ export class CameraRig {
   private distanceScale = 1;
   /** -1 or +1: which end a replay is filmed from. */
   replaySide: 1 | -1 = 1;
+  private pendingCut = false;
 
   setAspect(aspect: number): void {
     this.camera.aspect = aspect;
@@ -51,7 +52,12 @@ export class CameraRig {
     this.distanceScale = clamp(1.6 / aspect, 1, 2.3);
   }
 
-  setMode(mode: CameraMode): void {
+  /**
+   * Switch shot. With cut = true the camera jumps straight to the new framing (a TV "cut")
+   * instead of gliding there.
+   */
+  setMode(mode: CameraMode, cut = false): void {
+    if (cut) this.pendingCut = true;
     if (mode === this.mode) return;
     this.mode = mode;
     this.orbit = mode === 'celebration' ? 0.6 : 0;
@@ -77,6 +83,10 @@ export class CameraRig {
       case 'replay':
         this.replay(dt, ball);
         break;
+    }
+    if (this.pendingCut) {
+      this.snap();
+      this.pendingCut = false;
     }
     this.camera.position.copy(this.position);
     this.camera.lookAt(this.look);
@@ -114,7 +124,12 @@ export class CameraRig {
 
   private replay(dt: number, ball: Point): void {
     const side = this.replaySide;
-    this.targetPosition.set(side * (PITCH.halfLength + 7), 3.2, ball.z * 0.4 + 6);
+    // "Net cam": just behind the back of the net, in the gap before the end stand.
+    this.targetPosition.set(
+      side * (PITCH.halfLength + PITCH.goalDepth + 1.1),
+      1.9,
+      ball.z * 0.25 + 1.2,
+    );
     this.targetLook.set(ball.x, ball.y * 0.5 + 0.5, ball.z);
     this.follow(dt, 3, 8);
   }

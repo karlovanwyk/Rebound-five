@@ -20,6 +20,7 @@ import type { GameStateName } from './core/GameStateMachine';
 import { GameStateMachine } from './core/GameStateMachine';
 import { Loop } from './core/Loop';
 import { contrastingKit, MatchSession } from './core/MatchSession';
+import { ReplayPlayer } from './core/ReplayBuffer';
 import { SaveStore } from './core/Storage';
 import { GamepadInput, PAD } from './input/Gamepad';
 import { HumanController } from './input/HumanController';
@@ -113,6 +114,13 @@ function start(): void {
   let unlocksThisMatch: string[] = [];
   let debugTools: DebugTools | null = null;
 
+  // Instant replays: after a goal's celebration, the last 5 seconds play back from
+  // behind the goal while the simulation waits.
+  const replay = new ReplayPlayer(SIM.tickRate, 0.8);
+  let replayPending = false;
+  const replayTag = el('div', 'replay-tag', 'REPLAY');
+  uiRoot.append(replayTag);
+
   // ----- sessions -----
 
   function createAttractSession(): MatchSession {
@@ -142,6 +150,7 @@ function start(): void {
 
   function startAttract(): void {
     mode = 'attract';
+    stopReplay();
     useSession(createAttractSession(), BALL_DESIGNS[0].id);
     renderer.cameraRig.setMode('attract');
     hud.setVisible(false);
@@ -174,6 +183,7 @@ function start(): void {
       }),
       choice.ballId,
     );
+    stopReplay();
     menus.hide();
     hud.setVisible(true);
     hud.hideBanner();
@@ -188,6 +198,32 @@ function start(): void {
     machine.transition('kickoff');
     const round = mode === 'cup' && cup ? `${cupRoundName(cup)} · ` : '';
     hud.showBanner(`${kit.short} v ${opponent.short}`, `${round}${cpuLevel}`, 1.6);
+  }
+
+  // ----- instant replay -----
+
+  function startReplay(): void {
+    replayPending = false;
+    const lastGoal = session.world.match.goals[session.world.match.goals.length - 1];
+    // Team 0 scores in the +x goal, team 1 in the -x goal: film from behind that goal.
+    renderer.cameraRig.replaySide = lastGoal && lastGoal.team === 1 ? -1 : 1;
+    renderer.cameraRig.setMode('replay', true);
+    replay.start(session.replay);
+    replayTag.classList.toggle('show', replay.active);
+    hud.hideBanner();
+  }
+
+  function endReplay(): void {
+    replay.stop();
+    replayTag.classList.remove('show');
+    renderer.cameraRig.setMode('broadcast', true);
+    human.clearPresses();
+  }
+
+  function stopReplay(): void {
+    replay.stop();
+    replayPending = false;
+    replayTag.classList.remove('show');
   }
 
   // ----- menu flow -----
@@ -386,6 +422,7 @@ function start(): void {
       hud.showBanner('Goal!', subtitle, 2.8);
       renderer.cameraSubjectId = event.scorerId;
       renderer.cameraRig.setMode('celebration');
+      replayPending = true;
       gamepad.rumble(event.team === 0 ? 0.8 : 0.3, 300);
     } else if (event.type === 'whistle' && event.kind === 'goldenGoal') {
       hud.showBanner('Golden goal', 'next goal wins', 2.5);
@@ -415,6 +452,13 @@ function start(): void {
       return;
     }
 
+    if (replay.active) return; // the match waits while the replay plays
+    const { match } = session.world;
+    if (replayPending && match.phase === 'goal' && match.phaseTime <= dt * 1.5) {
+      startReplay();
+      return;
+    }
+
     human.sample(humanIntent);
     session.step(humanIntent);
     for (const event of session.world.events) onSimEvent(event);
@@ -428,7 +472,13 @@ function start(): void {
 
   function render(alpha: number, frameDt: number): void {
     gamepad.poll();
-    renderer.render(session.previous, session.current, alpha, frameDt);
+    const replayFrames = replay.active ? replay.frames() : null;
+    if (replayFrames) {
+      if (machine.current !== 'paused' && replay.update(frameDt)) endReplay();
+      renderer.render(replayFrames.previous, replayFrames.current, replayFrames.alpha, frameDt);
+    } else {
+      renderer.render(session.previous, session.current, alpha, frameDt);
+    }
     audio.update(frameDt, session.current.ball.x, PITCH.halfLength);
     hud.update(frameDt);
     debugTools?.update();
@@ -440,7 +490,7 @@ function start(): void {
     hud.setScore(world.match.score[0], world.match.score[1]);
     hud.setClock(formatClock(world.match));
     hud.help.style.display = machine.current === 'kickoff' && !touch.active ? '' : 'none';
-    minimap.draw(session.current);
+    minimap.draw(replayFrames ? replayFrames.current : session.current);
 
     if (fullTimeTimer > 0) {
       fullTimeTimer -= frameDt;
@@ -470,6 +520,13 @@ function start(): void {
       else if (code === 'KeyP' && machine.current === 'paused') resume();
       return;
     }
+    if (
+      replay.active &&
+      (code === 'Enter' || code === 'Space' || code === 'KeyJ' || code === 'KeyK')
+    ) {
+      endReplay();
+      return;
+    }
     if (code === 'KeyP' || code === 'Escape') pause();
   });
 
@@ -490,6 +547,10 @@ function start(): void {
       else if (buttonIndex === PAD.START && machine.current === 'paused') resume();
       return;
     }
+    if (replay.active && (buttonIndex === PAD.A || buttonIndex === PAD.B)) {
+      endReplay();
+      return;
+    }
     if (buttonIndex === PAD.START) pause();
   });
 
@@ -503,6 +564,9 @@ function start(): void {
 
   // Any click or tap counts as the user gesture that lets audio start.
   window.addEventListener('pointerdown', () => leaveBoot());
+  canvas.addEventListener('pointerdown', () => {
+    if (replay.active) endReplay();
+  });
 
   // Page Visibility API: pause and silence the game when the tab is hidden.
   document.addEventListener('visibilitychange', () => {

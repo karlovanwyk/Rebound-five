@@ -6,6 +6,8 @@
  *    config every tick, dragging a slider changes the game immediately: try ball
  *    restitution, player speeds or the AI difficulty presets.
  *  - The AI overlay (render/AIOverlay.ts): every AI player's state, target and steering.
+ *  - A "rebound" object on window, so you can poke at the live game from the DevTools
+ *    console, e.g. rebound.session().world.ball.pos or rebound.config.BALL.gravity = 3.
  *
  * This whole module is loaded with a dynamic import() only when #debug is present, and
  * lil-gui is imported dynamically again inside it. Vite turns each dynamic import into a
@@ -50,6 +52,10 @@ export class DebugTools {
 export async function installDebugTools(hooks: DebugHooks): Promise<DebugTools> {
   const { default: GUI } = await import('lil-gui');
   const tools = new DebugTools(hooks);
+  (window as unknown as { rebound: unknown }).rebound = {
+    session: hooks.getSession,
+    config: { AI, BALL, KEEPER, KICK, PLAYER, SIM, TACKLE },
+  };
   const gui = new GUI({ title: 'Rebound Five (debug)' });
 
   gui.add(tools, 'showOverlay').name('AI overlay');

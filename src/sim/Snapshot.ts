@@ -113,3 +113,12 @@ export function copySnapshot(out: Snapshot, source: Snapshot): void {
   Object.assign(out.ball, source.ball);
   for (let i = 0; i < source.players.length; i++) Object.assign(out.players[i], source.players[i]);
 }
+
+/** A deep copy (allocates). Used to pre-allocate replay frames. */
+export function cloneSnapshot(source: Snapshot): Snapshot {
+  return {
+    tick: source.tick,
+    ball: { ...source.ball },
+    players: source.players.map((p) => ({ ...p })),
+  };
+}

@@ -8,7 +8,7 @@
  * from a test.
  */
 import type { Difficulty, Kit } from '../config';
-import { AI } from '../config';
+import { AI, MATCH, SIM } from '../config';
 import type { Intent } from '../input/Intent';
 import { createIntent } from '../input/Intent';
 import { AIController } from '../sim/ai/AIController';
@@ -17,6 +17,12 @@ import type { Snapshot } from '../sim/Snapshot';
 import { captureSnapshot, copySnapshot, createSnapshot } from '../sim/Snapshot';
 import type { World } from '../sim/types';
 import { createWorld, stepWorld } from '../sim/World';
+import { ReplayBuffer } from './ReplayBuffer';
+
+/** Seconds of play kept for instant replays. */
+const REPLAY_SECONDS = 5;
+/** Keep recording this long into a goal celebration, to show the ball hitting the net. */
+const REPLAY_AFTER_GOAL = 1.2;
 
 export interface TeamSetup {
   name: string;
@@ -43,6 +49,8 @@ export class MatchSession {
   readonly current: Snapshot;
   readonly homeAI: AIController;
   readonly awayAI: AIController;
+  /** The last few seconds of play, for instant replays after a goal. */
+  readonly replay: ReplayBuffer;
 
   constructor(readonly setup: MatchSetup) {
     this.world = createWorld({
@@ -60,6 +68,7 @@ export class MatchSession {
     const homeLevel = setup.humanPlays ? AI.teammateDifficulty : 'normal';
     this.homeAI = new AIController(this.world, 0, presetFor(homeLevel), setup.seed + 1);
     this.awayAI = new AIController(this.world, 1, presetFor(setup.cpuDifficulty), setup.seed + 2);
+    this.replay = new ReplayBuffer(this.current, Math.round(REPLAY_SECONDS * SIM.tickRate));
   }
 
   /** Advance one fixed tick. `human` drives team 0's controlled player (null in attract mode). */
@@ -71,6 +80,16 @@ export class MatchSession {
     if (human && controlled >= 0) Object.assign(this.intents[controlled], human);
     stepWorld(this.world, this.intents);
     captureSnapshot(this.world, this.current);
+    this.recordReplayFrame();
+  }
+
+  /** Record live play, plus the first moments of a celebration (the ball in the net). */
+  private recordReplayFrame(): void {
+    const { match } = this.world;
+    const celebrating =
+      match.phase === 'goal' && match.phaseTime > MATCH.goalCelebration - REPLAY_AFTER_GOAL;
+    if (match.phase === 'playing' || celebrating) this.replay.record(this.current);
+    if (match.phase === 'kickoff') this.replay.clear();
   }
 
   /** Result from the human's (team 0's) point of view. */
