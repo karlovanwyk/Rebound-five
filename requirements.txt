@@ -1,0 +1,57 @@
+# =============================================================================
+# Rebound Five - requirements checklist
+# =============================================================================
+#
+# This is NOT how dependencies are installed. JavaScript projects use npm, which
+# reads package.json (and package-lock.json for exact versions). The real install
+# step is:
+#
+#     npm install
+#
+# This file is a human-readable checklist. Every line is a comment, so it is
+# harmless if anyone runs `pip install -r requirements.txt` on it.
+#
+# -----------------------------------------------------------------------------
+# Required software
+# -----------------------------------------------------------------------------
+#
+# Node.js         >= 22.12   (24 or 26 LTS recommended; .nvmrc pins 26)
+#                            https://nodejs.org  - check with: node --version
+# npm             >= 10      (ships with Node.js) - check with: npm --version
+# Git             >= 2.40    https://git-scm.com - check with: git --version
+# Web browser     any current WebGL2-capable browser: Chrome, Edge, Firefox or Safari
+#                 (check at https://get.webgl.org/webgl2/)
+# VS Code         >= 1.90    https://code.visualstudio.com
+#
+# -----------------------------------------------------------------------------
+# Recommended VS Code extensions (also listed in .vscode/extensions.json,
+# so VS Code offers to install them when you open the folder)
+# -----------------------------------------------------------------------------
+#
+# dbaeumer.vscode-eslint       ESLint: shows lint problems as you type
+# esbenp.prettier-vscode       Prettier: formats files on save
+# vitest.explorer              Vitest: run and debug tests from the Testing panel
+# bierner.markdown-mermaid     Renders the Mermaid diagrams in docs/*.md previews
+#
+# -----------------------------------------------------------------------------
+# npm runtime dependencies (shipped to the browser)
+# -----------------------------------------------------------------------------
+#
+# three@0.187.0                3D rendering with WebGLRenderer, plus math classes
+#                              (Vector3, Quaternion) and addons such as Stats
+# lil-gui@0.21.0               Debug tuning panel, only downloaded with #debug in the URL
+#
+# -----------------------------------------------------------------------------
+# npm development dependencies (tools; never shipped to players)
+# -----------------------------------------------------------------------------
+#
+# vite@8.3.8                   Dev server (native ES modules + HMR) and production bundler
+# typescript@6.0.3             Type checker for the .ts source (strict mode)
+# @types/three@0.187.0         TypeScript type definitions for three
+# vitest@5.1.1                 Test runner (shares Vite's config and module resolution)
+# eslint@10.15.0               Linter: catches bugs and enforces the sim/render boundary
+# @eslint/js@10.0.1            ESLint's recommended JavaScript rules
+# typescript-eslint@8.73.0     Lets ESLint understand TypeScript, with recommended TS rules
+# globals@17.14.0              Lists of browser/Node global variables for ESLint
+# eslint-config-prettier@10.1.8  Turns off ESLint rules that would fight Prettier
+# prettier@3.10.1              Code formatter
