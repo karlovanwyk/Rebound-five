@@ -7,7 +7,7 @@ import { createIntent } from '../src/input/Intent';
 import { createWorld, stepWorld } from '../src/sim/World';
 
 function practiceWorld() {
-  const world = createWorld({ seed: 1, playersPerTeam: [1, 0] });
+  const world = createWorld({ seed: 1, playersPerTeam: [1, 0], skipKickoff: true });
   const player = world.players[0];
   player.pos.set(-10, 0, 0);
   world.ball.pos.set(-10 + PLAYER.footOffset, world.ball.pos.y, 0);

@@ -12,6 +12,7 @@
  */
 import type { Vector3 } from 'three';
 import { BALL, PLAYER } from '../../config';
+import { resolveShot } from '../match/Stats';
 import { distanceXZ } from '../math';
 import type { PlayerState, World } from '../types';
 import { footX, footZ, isBodyLocked } from './Player';
@@ -158,6 +159,8 @@ function blockFastBalls(world: World, ballStart: Vector3): void {
     ball.pos.x = player.pos.x + nx * reach;
     ball.pos.z = player.pos.z + nz * reach;
     ball.lastTouchId = player.id;
+    // A blocked shot did not hit the target.
+    if (world.pendingShot) resolveShot(world, false);
     player.kickLockout = 0.12;
     world.events.push({
       type: 'bounce',

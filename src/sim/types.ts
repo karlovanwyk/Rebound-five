@@ -93,9 +93,71 @@ export interface World {
   /** All players. Ids equal their index in this array. */
   players: PlayerState[];
   teams: [TeamState, TeamState];
-  score: [number, number];
-  /** Practice mode: seconds until the ball is re-spotted after a goal. */
-  resetTimer: number;
+  match: MatchState;
+  stats: [TeamStats, TeamStats];
+  /** A pass that hasn't reached anyone yet (for pass completion stats). */
+  pendingPass: PendingPass | null;
+  /** A shot whose outcome (on/off target) isn't known yet. */
+  pendingShot: PendingShot | null;
   /** Events produced during the most recent tick. Cleared at the start of each tick. */
   events: SimEvent[];
+}
+
+/**
+ * kickoff:  players in position, waiting for the whistle.
+ * playing:  normal play, the clock runs.
+ * goal:     celebration; the clock is stopped.
+ * fullTime: the match is over.
+ */
+export type MatchPhase = 'kickoff' | 'playing' | 'goal' | 'fullTime';
+
+export interface GoalRecord {
+  team: TeamId;
+  scorerId: number | null;
+  ownGoal: boolean;
+  /** Clock tick when it was scored. */
+  clockTicks: number;
+}
+
+export interface MatchState {
+  phase: MatchPhase;
+  /** Seconds left in the kickoff or goal phase. */
+  phaseTime: number;
+  /** Ticks of playing time elapsed. Only advances in the 'playing' phase. */
+  clockTicks: number;
+  /** Ticks of playing time in a full match (real minutes * 60 * tickRate). */
+  durationTicks: number;
+  score: [number, number];
+  kickoffTeam: TeamId;
+  /** Seconds left in which opponents must stay out of the centre circle. */
+  kickoffProtection: number;
+  /** Cup matches can't end in a draw: they go to golden goal. */
+  goldenGoalEnabled: boolean;
+  goldenGoal: boolean;
+  goals: GoalRecord[];
+  /** The winner once the match is over, or null for a draw. */
+  winner: TeamId | null;
+}
+
+export interface TeamStats {
+  possessionTicks: number;
+  shots: number;
+  shotsOnTarget: number;
+  passes: number;
+  passesCompleted: number;
+  tacklesWon: number;
+  saves: number;
+}
+
+export interface PendingPass {
+  team: TeamId;
+  fromId: number;
+  toId: number | null;
+}
+
+export interface PendingShot {
+  team: TeamId;
+  shooterId: number;
+  /** Seconds since the shot was struck. */
+  age: number;
 }

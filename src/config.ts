@@ -127,6 +127,47 @@ export const KICK = {
   clearanceMaxSpeed: 20,
 };
 
+/** Tackling. A standing tackle is a quick poke; sprint + tackle is a slide. */
+export const TACKLE = {
+  /** How far in front of the tackler a standing tackle reaches. */
+  standReach: 1.25,
+  standDuration: 0.35,
+  /** Seconds into the tackle animation when the foot arrives. */
+  standContactTime: 0.12,
+  standSuccess: 0.75,
+  /** Tackling from behind rarely works. */
+  standFromBehindSuccess: 0.3,
+  cooldown: 0.6,
+  /** Extra cooldown after a missed standing tackle. */
+  missPenalty: 0.35,
+  slideSpeed: 8.8,
+  slideDuration: 0.6,
+  /** The slide can only win the ball during this first fraction of its duration. */
+  slideActiveFraction: 0.75,
+  slideReach: 0.85,
+  /** Speed the ball is knocked away at when a tackle wins it. */
+  knockSpeed: 5.5,
+  /** How long a tackled player is off their feet. */
+  stumbleTime: 0.35,
+  knockdownTime: 0.9,
+};
+
+/** Match flow. */
+export const MATCH = {
+  /** Real minutes per match (the clock shows 90 minutes squeezed into this). */
+  lengthOptions: [2, 3, 5],
+  defaultMinutes: 3,
+  kickoffDelay: 1.6,
+  goalCelebration: 3.4,
+  /** After kickoff, opponents stay out of the centre circle for up to this long. */
+  kickoffProtection: 3,
+  /** Control auto-switches to a teammate this much closer to the ball than you. */
+  autoSwitchMargin: 1.5,
+  autoSwitchCooldown: 0.45,
+  /** A shot not saved or scored within this time counts as off target. */
+  shotResolveTime: 2.5,
+};
+
 /** Colours used by the renderer and the minimap. */
 export const COLORS = {
   sky: '#0a1424',
